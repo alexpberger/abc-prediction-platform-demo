@@ -1,0 +1,49 @@
+.shell {
+  min-height: 100vh;
+  padding: 4rem;
+}
+
+.panel {
+  width: min(100%, 32rem);
+  background: var(--paper-elevated);
+  padding: 2.75rem;
+}
+
+.title {
+  margin-top: 0.7rem;
+  font-size: 2.75rem;
+}
+
+.accentRule {
+  width: 3.5rem;
+  height: 1px;
+  margin: 1.1rem 0 1.75rem;
+  border: 0;
+  background: var(--accent);
+}
+
+.form {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 1.1rem;
+}
+
+.field {
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+  width: 100%;
+}
+
+.note {
+  margin-top: 1.75rem;
+  padding-top: 1.1rem;
+  border-top: 1px solid var(--rule);
+  color: var(--ink-muted);
+}
+
+.error {
+  margin-top: 0.7rem;
+  color: var(--ink-muted);
+}

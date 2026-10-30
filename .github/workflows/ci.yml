@@ -1,0 +1,153 @@
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches:
+      - main
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install, lint, and test the backend
+        working-directory: backend
+        run: |
+          pip install -e ".[dev]"
+          ruff check .
+          pytest
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Typecheck the frontend
+        working-directory: frontend
+        run: |
+          npm ci
+          npm run typecheck
+
+      - uses: docker/setup-buildx-action@v3
+
+      - uses: docker/build-push-action@v6
+        with:
+          context: .
+          push: false
+          tags: abc-prediction-platform:ci
+
+  deploy:
+    if: github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main'
+    needs: test
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      id-token: write
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: azure/login@v2
+        with:
+          client-id: ${{ vars.AZURE_CLIENT_ID }}
+          tenant-id: ${{ vars.AZURE_TENANT_ID }}
+          subscription-id: ${{ vars.AZURE_SUBSCRIPTION_ID }}
+
+      - name: Log in to the container registry
+        run: az acr login --name ${{ vars.ACR_NAME }}
+
+      - uses: docker/setup-buildx-action@v3
+
+      - uses: docker/build-push-action@v6
+        with:
+          context: .
+          push: true
+          tags: ${{ vars.ACR_LOGIN_SERVER }}/abc-prediction-platform:${{ github.sha }}
+
+      - name: Update the staging container app and agent job
+        env:
+          IMAGE: ${{ vars.ACR_LOGIN_SERVER }}/abc-prediction-platform:${{ github.sha }}
+          APP_NAME: ${{ vars.CONTAINER_APP_NAME }}
+          JOB_NAME: ${{ vars.CONTAINER_JOB_NAME }}
+          RESOURCE_GROUP: ${{ vars.RESOURCE_GROUP }}
+        run: |
+          az containerapp update \
+            --name "$APP_NAME" \
+            --resource-group "$RESOURCE_GROUP" \
+            --image "$IMAGE"
+          python3 << 'PY'
+          import json
+          import os
+          import subprocess
+
+          image = os.environ["IMAGE"]
+          subscription = subprocess.check_output(
+              ["az", "account", "show", "--query", "id", "-o", "tsv"],
+              text=True,
+          ).strip()
+          job_id = (
+              f"/subscriptions/{subscription}/resourceGroups/{os.environ['RESOURCE_GROUP']}"
+              f"/providers/Microsoft.App/jobs/{os.environ['JOB_NAME']}"
+          )
+          url = f"https://management.azure.com{job_id}?api-version=2025-07-01"
+          job = json.loads(
+              subprocess.check_output(["az", "rest", "--method", "get", "--url", url])
+          )
+          template = job["properties"]["template"]
+          agent = next(
+              (container for container in template["containers"] if container.get("name") == "agent"),
+              None,
+          )
+          if agent is None:
+              raise SystemExit("The agent container is missing from the job.")
+          refs = {
+              item.get("name"): item.get("secretRef")
+              for item in agent.get("env", [])
+              if item.get("secretRef")
+          }
+          if (
+              refs.get("AZURE_OPENAI_ENDPOINT") != "openai-endpoint"
+              or refs.get("AZURE_OPENAI_CHAT_MODEL") != "openai-deployment"
+          ):
+              raise SystemExit(
+                  "The job secrets are not the Key Vault bindings. Apply infra/staging before deploying."
+              )
+          volume_names = {item.get("name") for item in template.get("volumes") or []}
+          mount_names = {item.get("volumeName") for item in agent.get("volumeMounts") or []}
+          if "proposals" not in volume_names or "proposals" not in mount_names:
+              raise SystemExit(
+                  "The job is missing the proposals file share. Apply infra/staging before deploying."
+              )
+          agent["image"] = image
+          properties = job["properties"]
+          for key in ("provisioningState", "eventStreamEndpoint", "outboundIpAddresses"):
+              properties.pop(key, None)
+          for secret in properties.get("configuration", {}).get("secrets") or []:
+              if secret.get("keyVaultUrl"):
+                  secret.pop("value", None)
+          assigned = (job.get("identity") or {}).get("userAssignedIdentities") or {}
+          body = {
+              "location": job["location"],
+              "identity": {
+                  "type": job.get("identity", {}).get("type"),
+                  "userAssignedIdentities": {key: {} for key in assigned},
+              },
+              "tags": job.get("tags") or {},
+              "properties": properties,
+          }
+          with open("job-update.json", "w", encoding="utf-8") as handle:
+              json.dump(body, handle)
+          subprocess.check_call(
+              ["az", "rest", "--method", "put", "--url", url, "--body", "@job-update.json"]
+          )
+          PY

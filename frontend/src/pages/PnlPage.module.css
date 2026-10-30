@@ -1,0 +1,75 @@
+.tableWrap {
+  overflow-x: auto;
+  margin-top: 1.5rem;
+  background: var(--paper-elevated);
+  border: 1px solid var(--rule);
+}
+
+.table {
+  width: 100%;
+  min-width: 52rem;
+  border-collapse: collapse;
+}
+
+.table th,
+.table td {
+  padding: 0.75rem 0.9rem;
+  text-align: left;
+  vertical-align: top;
+  border-bottom: 1px solid var(--rule);
+}
+
+.table th {
+  color: var(--ink-muted);
+  font-size: 0.75rem;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.nowrap {
+  white-space: nowrap;
+}
+
+.detailsButton {
+  padding: 0.35rem 0.7rem;
+}
+
+.backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 20;
+  background: rgba(28, 27, 25, 0.28);
+}
+
+.panel {
+  position: fixed;
+  top: 0;
+  right: 0;
+  bottom: 0;
+  z-index: 21;
+  width: min(36rem, 100%);
+  overflow: auto;
+  padding: 1.5rem;
+  background: var(--paper);
+  border-left: 1px solid var(--rule);
+}
+
+.panelHeader {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 1rem;
+}
+
+.panelTitle {
+  font-size: 1.8rem;
+}
+
+.panelSection {
+  margin-top: 1.5rem;
+}
+
+.panelSection p + p {
+  margin-top: 0.45rem;
+}

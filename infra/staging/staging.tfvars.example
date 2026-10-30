@@ -1,0 +1,11 @@
+name_suffix = "example"
+
+# Set this after the first image is in the registry, then apply again.
+# container_image = "abcpredexample.azurecr.io/abc-prediction-platform:staging"
+
+# Optional. The OpenAI account is in Sweden Central. The rest of staging stays in North Europe.
+# openai_location            = "swedencentral"
+# Optional. The defaults deploy gpt-5.4, version 2026-03-05, at 10,000 tokens per minute.
+# openai_model_name          = "gpt-5.4"
+# openai_model_version       = "2026-03-05"
+# openai_deployment_capacity = 10
